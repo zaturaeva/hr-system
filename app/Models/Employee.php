@@ -1,4 +1,6 @@
 <?php
+// app/Models/Employee.php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -25,18 +27,18 @@ class Employee extends Model
         'extra_vacation_days' => 'integer'
     ];
 
-    public function __construct(array $attributes = [])
+    protected static function booted()
     {
-        parent::__construct($attributes);
+        static::creating(function ($employee) {
+            $employee->validateEmployeeData($employee->getAttributes());
+        });
+
+        static::updating(function ($employee) {
+            $employee->validateEmployeeData($employee->getAttributes());
+        });
     }
 
-    public function save(array $options = [])
-    {
-        $this->validateEmployeeData($this->attributes);
-        return parent::save($options);
-    }
-
-    protected function validateEmployeeData(array $data): void
+    public function validateEmployeeData(array $data): void
     {
         if (empty(trim($data['full_name'] ?? ''))) {
             throw new ValidationError("ФИО не может быть пустым");
@@ -44,13 +46,11 @@ class Employee extends Model
 
         if (isset($data['hire_date'])) {
             try {
-                // Проверяем тип данных
                 if ($data['hire_date'] instanceof DateTime) {
                     $hireDate = $data['hire_date'];
                 } elseif (is_string($data['hire_date'])) {
                     $hireDate = new DateTime($data['hire_date']);
                 } else {
-                    // Если это уже объект Carbon (из Eloquent)
                     $hireDate = $data['hire_date'];
                 }
                 
@@ -58,8 +58,10 @@ class Employee extends Model
                 if ($hireDate > $now) {
                     throw new ValidationError("Дата приёма не может быть в будущем");
                 }
+            } catch (ValidationError $e) {
+                throw $e;
             } catch (\Exception $e) {
-                throw new ValidationError("Неверный формат даты приёма: " . $e->getMessage());
+                throw new ValidationError("Неверный формат даты приёма");
             }
         }
 
@@ -130,24 +132,5 @@ class Employee extends Model
             'probation' => 'bg-info'
         ];
         return $statuses[$this->status ?? 'active'] ?? 'bg-secondary';
-    }
-
-    public function getHireDateAttribute($value)
-    {
-        if ($value instanceof DateTime) {
-            return $value;
-        }
-        return $value ? new DateTime($value) : null;
-    }
-
-    public function setHireDateAttribute($value)
-    {
-        if ($value instanceof DateTime) {
-            $this->attributes['hire_date'] = $value->format('Y-m-d');
-        } elseif (is_string($value)) {
-            $this->attributes['hire_date'] = $value;
-        } else {
-            $this->attributes['hire_date'] = $value;
-        }
     }
 }
